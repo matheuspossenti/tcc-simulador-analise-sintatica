@@ -16,6 +16,7 @@ def bottom_up_algorithm(action_table, goto_table, input):
             "input": input_tape.copy(),
             "pointer": pointer,
             "stepMarker": ["", ""],
+            "errorInfo": None
         }
     ]
 
@@ -24,7 +25,24 @@ def bottom_up_algorithm(action_table, goto_table, input):
         aux_cont += 1
 
         if aux_cont > 1000:
+            error_info = {
+                "errorType": "LOOP_LIMIT",
+                "message": "Limite de iterações excedido. Possível loop infinito na análise.",
+                "position": pointer,
+                "expected": None,
+                "found": input_tape[pointer] if pointer < len(input_tape) else None
+            }
+            detailed_steps.append({
+                "stepByStep": ["A análise foi interrompida devido a um possível loop infinito."],
+                "stepByStepDetailed": [["Número máximo de iterações excedido. Verifique se a gramática está correta."]],
+                "stack": stack[::-1].copy(),
+                "input": input_tape.copy(),
+                "pointer": pointer,
+                "stepMarker": ["", ""],
+                "errorInfo": error_info
+            })
             break
+
         # Label do passo a passo
         step_by_step = []
         step_by_step_detailed = []
@@ -34,12 +52,23 @@ def bottom_up_algorithm(action_table, goto_table, input):
 
         action[0] = int(stack[len(stack) - 1]) + 1
         action[1] = input_tape[pointer]
+        
+        # Verificar erro léxico
         if not action[1] in action_table:
+            error_info = {
+                "errorType": "LEXICAL_ERROR",
+                "message": f"Token não reconhecido: '{action[1]}'",
+                "position": pointer,
+                "expected": list(action_table.keys()),
+                "found": action[1]
+            }
+            
             step_by_step.append(f"A entrada foi rejeitada devido a um erro léxico!")
             step_by_step_detailed.append(
                 [
                     f"A entrada tem um erro lexico em: {action[1]}.",
                     "Um erro léxico ocorre quando um token identificado não pertence a gramática da linguagem fonte.",
+                    f"Tokens esperados: {', '.join(list(action_table.keys())[:5])}{'...' if len(action_table.keys()) > 5 else ''}"
                 ]
             )
             detailed_steps.append(
@@ -50,11 +79,45 @@ def bottom_up_algorithm(action_table, goto_table, input):
                     "input": input_tape.copy(),
                     "pointer": pointer,
                     "stepMarker": ["", ""],
+                    "errorInfo": error_info
                 }
             )
             break
-        action_movement = action_table[action[1]][action[0]].split("[")
+            
+        # Verificar ação na tabela
+        try:
+            action_movement = action_table[action[1]][action[0]].split("[")
+        except (KeyError, IndexError):
+            error_info = {
+                "errorType": "TABLE_ACCESS_ERROR",
+                "message": f"Erro ao acessar a tabela de ações para estado {action[0]-1} e símbolo '{action[1]}'",
+                "position": pointer,
+                "expected": None,
+                "found": action[1]
+            }
+            step_by_step.append(f"Erro ao acessar a tabela de ações!")
+            step_by_step_detailed.append(
+                [
+                    f"Não foi possível encontrar uma ação para o estado {action[0]-1} e símbolo '{action[1]}'.",
+                    "Verifique se a gramática está corretamente definida."
+                ]
+            )
+            detailed_steps.append(
+                {
+                    "stepByStep": step_by_step.copy(),
+                    "stepByStepDetailed": step_by_step_detailed.copy(),
+                    "stack": stack[::-1].copy(),
+                    "input": input_tape.copy(),
+                    "pointer": pointer,
+                    "stepMarker": ["", ""],
+                    "errorInfo": error_info
+                }
+            )
+            break
+            
         action_movement[0] = action_movement[0].strip()
+        
+        # Processar ação
         if action_movement[0] != "ACEITO" and action_movement[0] != "ERRO!":
             action_movement[1] = action_movement[1].strip("]")
             action_movement[1] = action_movement[1].strip()
@@ -66,16 +129,41 @@ def bottom_up_algorithm(action_table, goto_table, input):
                 f"Na coluna >>{action[1]}<< e linha >>{action[0] - 1}<< encontrado movimento: {action_movement}",
             ]
         )
-        detailed_steps.append(
-            {
-                "stepByStep": step_by_step.copy(),
-                "stepByStepDetailed": step_by_step_detailed.copy(),
-                "stack": stack[::-1].copy(),
-                "input": input_tape.copy(),
-                "pointer": pointer,
-                "stepMarker": [f"{action[1]}", action[0] - 1],
+        
+        # Verificar erro sintático
+        if action_movement[0] == "ERRO!":
+            # Determinar tokens esperados
+            expected_tokens = []
+            for token in action_table:
+                if action_table[token][action[0]] != "ERRO!":
+                    expected_tokens.append(token)
+            
+            error_info = {
+                "errorType": "SYNTAX_ERROR",
+                "message": f"Erro sintático: token inesperado '{action[1]}'",
+                "position": pointer,
+                "expected": expected_tokens[:5],
+                "found": action[1],
+                "state": action[0] - 1
             }
-        )
+            
+            step_by_step.append(f"A entrada não está correta.")
+            step_by_step_detailed.append([
+                f"A entrada tem um erro sintático no token '{action[1]}' na posição {pointer}.",
+                f"Tokens esperados: {', '.join(expected_tokens[:5])}{'...' if len(expected_tokens) > 5 else ''}"
+            ])
+            detailed_steps.append(
+                {
+                    "stepByStep": step_by_step.copy(),
+                    "stepByStepDetailed": step_by_step_detailed.copy(),
+                    "stack": stack[::-1].copy(),
+                    "input": input_tape.copy(),
+                    "pointer": pointer,
+                    "stepMarker": ["", ""],
+                    "errorInfo": error_info
+                }
+            )
+            break
 
         if action_movement[0][:8] == "REDUZIR":
             array_action_movement = action_movement[1].split(" ")

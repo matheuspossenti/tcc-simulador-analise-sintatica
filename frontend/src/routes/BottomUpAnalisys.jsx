@@ -12,6 +12,7 @@ import InputTape from "../components/bottomUpAnalisys/InputTape";
 import CardStepByStep from "../components/bottomUpAnalisys/CardStepByStep";
 import CardGrammar from "../components/bottomUpAnalisys/CardGrammar";
 import LoadingCard from "../components/common/LoadingCard";
+import ErrorDiagnostic from "../components/common/ErrorDiagnostic";
 
 const BottomUpAnalisys = () => {
   const location = useLocation();
@@ -144,6 +145,12 @@ const BottomUpAnalisys = () => {
             <CardGrammar grammar={grammar} />
           </div>
         </div>
+      )}
+      {steps && steps.length > 0 && steps[steps.length - 1].errorInfo && (
+        <ErrorDiagnostic 
+          errorInfo={steps[steps.length - 1].errorInfo} 
+          input={location.state["inputTape"]}
+        />
       )}
     </div>
   );
