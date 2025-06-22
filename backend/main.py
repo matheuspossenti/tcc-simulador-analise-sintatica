@@ -16,7 +16,6 @@ origins = [
     "http://localhost:5173",
     "localhost:5173",
     "https://stunning-sunburst-01b3b4.netlify.app",
-    "https://stunning-sunburst-01b3b4.netlify.app"
 ]
 
 
