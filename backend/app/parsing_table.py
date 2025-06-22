@@ -4,25 +4,41 @@ import pandas as pd
 
 # Obtem a tabela de analise do site: https://smlweb.cpsc.ucalgary.ca/
 def get_parsing_table(grammar, analysis_type):
-    if analysis_type == "ll1":
-        aux_type = "ll1-table"
-    elif analysis_type == "slr1":
-        aux_type = "lr0"
-    else:
-        aux_type = analysis_type
+    try:
+        if analysis_type == "ll1":
+            aux_type = "ll1-table"
+        elif analysis_type == "slr1":
+            aux_type = "lr0"
+        else:
+            aux_type = analysis_type
 
-    url = f"https://smlweb.cpsc.ucalgary.ca/{aux_type}.php?grammar={grammar}"
-    url = url.replace(" ", "%20")
+        url = f"https://smlweb.cpsc.ucalgary.ca/{aux_type}.php?grammar={grammar}"
+        url = url.replace(" ", "%20")
 
-    parsing_table = pd.read_html(url)
-    if analysis_type == "lr0" or analysis_type == "lr1":
-        return parsing_table[2]
-    elif analysis_type == "ll1":
-        return parsing_table[1]
-    elif analysis_type == "slr1" or analysis_type == "lalr1":
-        return parsing_table[3]
-    else:
-        return {"Erro": "Houve um erro!"}
+        parsing_table = pd.read_html(url)
+        
+        # Verificar se há tabelas suficientes
+        if len(parsing_table) == 0:
+            return {"Erro": "Nenhuma tabela encontrada. Verifique a gramática."}
+            
+        if analysis_type == "lr0" or analysis_type == "lr1":
+            if len(parsing_table) < 3:
+                return {"Erro": "Tabela de análise não gerada corretamente. Verifique a gramática."}
+            return parsing_table[2]
+        elif analysis_type == "ll1":
+            if len(parsing_table) < 2:
+                return {"Erro": "Tabela de análise não gerada corretamente. Verifique a gramática."}
+            return parsing_table[1]
+        elif analysis_type == "slr1" or analysis_type == "lalr1":
+            if len(parsing_table) < 4:
+                return {"Erro": "Tabela de análise não gerada corretamente. Verifique a gramática."}
+            return parsing_table[3]
+        else:
+            return {"Erro": "Tipo de análise não suportado."}
+    except IndexError:
+        return {"Erro": "Erro ao processar a tabela. A gramática pode estar incorreta ou não ser compatível com o tipo de análise."}
+    except Exception as e:
+        return {"Erro": f"Erro ao gerar tabela de análise: {str(e)}"}
 
 
 # Converter tabela em dicionario
@@ -62,32 +78,47 @@ def sep_terminals_nonterminals(grammar):
 
 # Separar tabela de acoes e transicoes
 def get_goto_action_tables(grammar, analysis_type):
-    parsing_table = get_parsing_dict(get_parsing_table(grammar, analysis_type))
-    term_nterm = sep_terminals_nonterminals(grammar)
+    try:
+        parsing_table = get_parsing_table(grammar, analysis_type)
+        
+        # Verificar se houve erro na obtenção da tabela
+        if isinstance(parsing_table, dict) and "Erro" in parsing_table:
+            raise Exception(parsing_table["Erro"])
+            
+        parsing_dict = get_parsing_dict(parsing_table)
+        term_nterm = sep_terminals_nonterminals(grammar)
 
-    action = {
-        key: parsing_table[key]
-        for key in parsing_table.keys() & term_nterm["terminals"]
-    }
-    action["$"] = parsing_table["$"]
+        action = {
+            key: parsing_dict[key]
+            for key in parsing_dict.keys() & term_nterm["terminals"]
+        }
+        
+        # Verificar se '$' está presente
+        if '$' not in parsing_dict:
+            raise Exception("Símbolo '$' não encontrado na tabela. A gramática pode estar incorreta.")
+            
+        action["$"] = parsing_dict["$"]
 
-    action = replace_dict(action, " ", "ERRO!")
-    action = replace_dict(action, "acc", "ACEITO")
-    action = replace_functions(action)
-    action = replace_functions(action)
+        action = replace_dict(action, " ", "ERRO!")
+        action = replace_dict(action, "acc", "ACEITO")
+        action = replace_functions(action)
+        action = replace_functions(action)
 
-    goto = {
-        key: parsing_table[key]
-        for key in parsing_table.keys() & term_nterm["nonterminals"]
-    }
+        goto = {
+            key: parsing_dict[key]
+            for key in parsing_dict.keys() & term_nterm["nonterminals"]
+        }
 
-    goto = replace_functions(goto)
+        goto = replace_functions(goto)
 
-    return {
-        "terminals_nonterminals": term_nterm,
-        "action_table": action,
-        "goto_table": goto,
-    }
+        return {
+            "terminals_nonterminals": term_nterm,
+            "action_table": action,
+            "goto_table": goto,
+        }
+    except Exception as e:
+        # Propagar o erro para ser tratado na rota
+        raise Exception(f"Erro na geração das tabelas: {str(e)}")
 
 
 def replace_dict(dictionary, original, final):
